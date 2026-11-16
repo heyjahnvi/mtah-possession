@@ -1,0 +1,16 @@
+# Match data is licensed for the competition only and must never be committed.
+data/
+*.mp4
+*_atd.txt
+*_atd.xml
+*_homography.csv
+*_smart_tagging.xml
+cache/
+*.npz
+__pycache__/
+*.pyc
+.venv/
+# Generated submissions (regenerate with `python run.py`)
+outputs/*.csv
+sample-data/
+more-than-a-hack-2027/

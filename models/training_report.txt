@@ -1,0 +1,18 @@
+Sample_Game_1: 145006 frames, D share 0.368, 440 label segments
+  features built (6s)
+Sample_Game_2: 141156 frames, D share 0.322, 401 label segments
+  features built (11s)
+Sample_Game_3: 143761 frames, D share 0.271, 461 label segments
+  features built (43s)
+  held-out Sample_Game_1_deg100: frame accuracy team 0.861 (alive frames), dead 0.880
+  held-out Sample_Game_2_deg200: frame accuracy team 0.838 (alive frames), dead 0.876
+  held-out Sample_Game_3_deg300: frame accuracy team 0.862 (alive frames), dead 0.924
+tuning decoder; start spellF1 0.4924
+  round 1: spellF1 0.5599 with {'p_switch': 13, 'p_dead': 35, 'ha_scale': 0.5, 'd_scale': 1.0, 'd_bias': 1.5}
+  round 2: spellF1 0.5654 with {'p_switch': 13, 'p_dead': 35, 'ha_scale': 1.0, 'd_scale': 0.5, 'd_bias': 1.5}
+  round 3: spellF1 0.5659 with {'p_switch': 13, 'p_dead': 25, 'ha_scale': 1.0, 'd_scale': 0.5, 'd_bias': 1.5}
+held-out results with tuned decoder (degraded external games):
+  Sample_Game_1: spellF1 0.5505 macroF1 0.8410 (possessions true 352 / predicted 246)   | organisers' baseline here: spellF1 0.2294 macroF1 0.4150
+  Sample_Game_2: spellF1 0.5986 macroF1 0.8273 (possessions true 315 / predicted 251)   | organisers' baseline here: spellF1 0.2339 macroF1 0.4441
+  Sample_Game_3: spellF1 0.5486 macroF1 0.8516 (possessions true 376 / predicted 278)   | organisers' baseline here: spellF1 0.2003 macroF1 0.4491
+saved models/model.joblib (165s total)

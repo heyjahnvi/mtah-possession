@@ -1,0 +1,6 @@
+decoder parameters (tuned on external games): {'p_switch': 13, 'p_dead': 25, 'ha_scale': 1.0, 'd_scale': 0.5, 'd_bias': 1.5}
+teams: H = Barcelona, A = Atletic Club; 46 track slots; 638 smart-tagging instances (25s)
+half 1: kickoff detected at video frame 11189 (4 graded frames before it set dead)
+half 2: kickoff detected at video frame 113660 (2852 graded frames before it set dead)
+summary (graded frames): H 0.329  A 0.204  D 0.467; 246 possessions; ball seen on 59.2% after bridging
+wrote C:\mtah\mtah-possession\mtah-possession\mtah-possession\outputs\FC Data-lona.csv (31s)

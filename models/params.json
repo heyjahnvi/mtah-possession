@@ -1,0 +1,7 @@
+{
+  "p_switch": 13,
+  "p_dead": 25,
+  "ha_scale": 1.0,
+  "d_scale": 0.5,
+  "d_bias": 1.5
+}

@@ -1,0 +1,5 @@
+# Python 3.12 or 3.13. Pinned to the exact versions models/model.joblib was trained with.
+numpy==2.5.3
+pandas==3.0.5
+scikit-learn==1.9.1
+joblib==1.6.0
