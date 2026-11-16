@@ -1,61 +1,59 @@
-# More than a Hack 2027 — Phase 1: Ball Possession
+# More than a Hack 2027, Phase 1: Ball Possession
 
-Labels every frame of the tactical video of FC Barcelona vs Athletic Club as `H`, `A`, `D` or `X`.
+Team FC Data-lona's entry for the Initial Challenge. It labels every frame of the Barcelona vs
+Athletic Club tactical video as H, A, D or X.
 
-**Compliance in one line:** every model and every tuned parameter comes from **external data
-only**, namely Metrica Sports' open sample games
+All the training and tuning happens on Metrica Sports' public sample games
 ([metrica-sports/sample-data](https://github.com/metrica-sports/sample-data)). The competition
-game is only ever *read as input* by fixed models. No hand labels, no human-produced data about
-the game, no use of the video or the ground truth for training, fitting or calibration, and no
-upload of the provided data to any AI service.
+match is only used as input to models that are already trained. We didn't hand label anything,
+didn't use the video, and didn't train or tune on the ground truth.
 
-Full write-up: [TECHNICAL.md](TECHNICAL.md).
+The write-up is in [TECHNICAL.md](TECHNICAL.md).
 
-## Reproduce the submission
+## Getting the submission file
 
-Python 3.12 or 3.13.
+You need Python 3.12 or 3.13.
 
 ```bash
 pip install -r requirements.txt
-python run.py --data /path/to/unpacked/bundle --team <TeamName>
-# -> outputs/<TeamName>.csv  and  outputs/<TeamName>_run_log.txt
+python run.py --data /path/to/bundle --team "FC Data-lona"
 ```
 
-`--data` is the folder that contains `tactical/`. Only these files are read:
-`BAR-ATH_tactical_atd.xml`, `BAR-ATH_tactical_atd.txt` and `BAR-ATH_tactical_smart_tagging.xml`.
+This writes `outputs/FC Data-lona.csv` and a short log next to it.
 
-`run.py` loads the committed `models/model.joblib`, so it needs no training step. It takes
-about 1–2 minutes and is deterministic: the same data and the same pinned versions produce the
-same file.
+`--data` is the folder from the organisers that has `tactical/` in it. We only read three files
+from it: `BAR-ATH_tactical_atd.xml`, `BAR-ATH_tactical_atd.txt` and
+`BAR-ATH_tactical_smart_tagging.xml`.
 
-On Windows: `RUN_ME_WINDOWS.bat <TeamName> "C:\path\to\bundle"` sets up a virtualenv, runs the
-pipeline, then validates the file with the organisers' `validate_submission.py`.
+The trained model is already in `models/`, so there's no training step. It runs in about a
+minute, and you get the same file every time.
 
-## Retrain from scratch (external data only)
+On Windows you can also run `RUN_ME_WINDOWS.bat "FC Data-lona" "C:\path\to\bundle"`. It sets up
+a virtual environment, runs everything and checks the file with the organisers' validator.
+
+## Retraining
+
+If you want to rebuild the model yourself:
 
 ```bash
 git clone https://github.com/metrica-sports/sample-data.git
 pip install -r requirements-train.txt
 python train.py --sample-data ./sample-data
-# -> models/model.joblib, models/params.json, models/training_report.txt
 ```
 
-## Layout
+## What's where
 
-| path | what |
-|---|---|
-| `run.py` | apply the fixed models to the competition game, write the CSV |
-| `train.py` | train classifiers and tune the decoder on the external sample games |
-| `possession/game.py` | loaders (competition ATD, Metrica sample games), event → label derivation |
-| `possession/degrade.py` | makes clean external tracking look like automatic tracking |
-| `possession/features.py` | ball cleaning, distances, team shape, dead-ball cues |
-| `possession/models.py` | the two gradient-boosted frame classifiers |
-| `possession/decode.py` | three-state Viterbi decoder |
-| `possession/official_metrics.py` | the organisers' scorer, vendored unchanged (MIT), used in tuning |
-| `models/` | trained models, tuned decoder parameters, training report |
+- `run.py` runs the trained model on the competition match and writes the CSV
+- `train.py` trains the classifiers and picks the decoder settings on the sample games
+- `possession/game.py` loads the data and turns sample-game events into frame labels
+- `possession/degrade.py` adds noise to the sample games so they look like automatic tracking
+- `possession/features.py` builds the per-frame features
+- `possession/models.py` has the two classifiers
+- `possession/decode.py` has the Viterbi decoder
+- `possession/official_metrics.py` is the organisers' scoring code, copied as is (MIT licence)
+- `models/` holds the trained model, the decoder settings and the training log
 
 ## Data
 
-The match data is licensed for the competition and is **not** in this repository. `.gitignore`
-excludes it, along with every generated CSV. Metrica sample data © Metrica Sports, used with
-attribution as their repository requests.
+The match data is only licensed for the competition, so it's not in this repo, and
+`.gitignore` keeps it (and any generated CSVs) out. Sample game data is from Metrica Sports.

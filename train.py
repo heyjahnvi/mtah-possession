@@ -1,20 +1,18 @@
-"""Train and tune everything on EXTERNAL data only: Metrica Sports' open sample games.
+"""Trains and tunes everything on the Metrica Sports sample games. Nothing from the
+competition match is used here.
 
     git clone https://github.com/metrica-sports/sample-data.git
-    pip install -r requirements.txt
-    python train.py --sample-data ./sample-data        # writes models/model.joblib + report
+    pip install -r requirements-train.txt
+    python train.py --sample-data ./sample-data
 
-Nothing from the competition game (BAR-ATH) is read here. The competition rules require that any
-training or tuning uses external data only; this script is where all of it happens.
-
-Steps
-  1. Load the three sample games and derive per-frame H/A/D labels from their event data.
-  2. Degrade each game to look like automatic tracking (possession/degrade.py), two seeds.
-  3. Build features, plus a home/away-swapped copy (symmetry augmentation).
-  4. Leave-one-game-out: train on two games, predict the third.
-  5. Tune the decoder (switch penalties, scales, dead bias) on those out-of-game predictions,
-     maximising the official spellF1, averaged over the three games.
-  6. Retrain both classifiers on all three games and save them with the tuned decoder.
+What it does:
+  1. loads the three sample games and turns their event data into H/A/D labels per frame
+  2. adds noise so they look like automatic tracking (possession/degrade.py), with 2 seeds
+  3. builds features, plus a copy with home and away swapped
+  4. trains on two games and predicts the third, for each of the three games
+  5. picks the decoder settings that give the best spellF1 on those held-out predictions
+     (using the organisers' own scoring code)
+  6. retrains on all three games and saves models/model.joblib
 """
 
 import argparse
@@ -55,7 +53,7 @@ def score(labels_gt, labels_pred):
 
 
 def baseline(game, lab, window=50):
-    """The organisers' baseline (nearest player + majority vote), for reference on these games."""
+    """Organisers' baseline (nearest player + majority vote), just to compare against."""
     hm = game.half_mask()
     ball, _ = F.clean_ball(game.ball, hm)
     d = np.hypot(game.players[:, :, 0] - ball[:, None, 0], game.players[:, :, 1] - ball[:, None, 1])

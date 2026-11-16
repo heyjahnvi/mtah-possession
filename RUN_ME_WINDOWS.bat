@@ -27,6 +27,6 @@ echo DONE. File: outputs\%TEAM%.csv    Log: outputs\%TEAM%_run_log.txt
 pause
 exit /b 0
 :err
-echo Something failed above. Copy the error text and send it to Claude.
+echo Something failed above, check the error message.
 pause
 exit /b 1

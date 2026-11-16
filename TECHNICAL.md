@@ -1,183 +1,218 @@
-# Technical document — More than a Hack 2027, Phase 1
+# FC Data-lona: Technical document
 
-**Team:** _<TeamName>_ · **Repository:** _<public URL>_ · **Submission file:** `<TeamName>.csv`
+More than a Hack 2027, Phase 1 (Ball Possession)
 
-## 1. Approach
+Team: FC Data-lona
 
-Possession is a property of *intervals*, and the ranking metric (spellF1) scores whole
-possessions. So the system has two stages:
+Repository: https://github.com/heyjahnvi/mtah-possession
 
-1. **Two frame classifiers** give, for every frame, `P(home | ball alive)` and `P(ball dead)`.
-2. **A three-state Viterbi decoder** (H, A, D) turns those probabilities into a label sequence
-   for each half. Every change of state has a cost, so a team only takes over the ball when its
-   evidence outlasts the incumbent's for long enough to pay that cost.
+Submission file: `FC Data-lona.csv`
 
-The decoder is our working definition of **controlled possession**. A touch, a deflection or a
-lost aerial duel gives a few frames of contrary evidence and cannot pay for a switch; sustained
-control can. We chose it over smoothing, because a smoothing window trades flicker against late
-transitions (the organisers' four baselines show exactly that), while switching costs keep
-transitions sharp and still remove flicker.
+## 1. How it works
 
-### Compliance with the rules clarification
+The leaderboard uses spellF1, which scores whole possessions rather than single frames. So we
+split the job into two parts.
 
-| rule | how we meet it |
-|---|---|
-| train/retrain only on external data | both classifiers are trained only on Metrica's open sample games 1–3 |
-| tune parameters only on external data | all five decoder parameters are tuned on those games (§1.4) |
-| no hand labels or human-produced data on the provided game | none; the external games' labels come from *their own* event data |
-| no checking output against the video | the video is never opened by code or by us |
-| no uploading provided data to AI services | the data never left the team's own machine |
+First, two classifiers look at every frame on its own. One gives the probability that the home
+team has the ball (when the ball is in play). The other gives the probability that the ball is
+dead.
 
-The competition game is only *read as input* by models that are already fixed. Two structural
-priors from Smart Tagging are applied with constants set by reasoning, not tuned (§1.5).
+Second, a Viterbi decoder with three states (H, A and D) turns those probabilities into a clean
+sequence for each half. Every switch between states has a cost. A team only takes over if the
+classifier keeps favouring it for long enough to cover that cost.
 
-### 1.1 External training data
+That cost is also how we handle the "controlled possession" rule. A touch, a deflection or an
+aerial duel only gives a few frames of the other team near the ball, which isn't enough to pay
+for a switch. Real control lasts longer and does pay for it.
 
-We used the three public **Metrica Sports sample games**, which include tracking and event data
-for both teams at 25 fps. Per-frame labels are derived from their event data by an algorithm that
-follows the competition definition:
-- A team owns the ball from its first controlled action (pass, carry, recovery, shot, restart)
-  until the opponent's.
-- The ball is dead from the moment it crosses a line (`BALL OUT` end frame, or a shot going out),
-  a foul is given or a goal is scored, until the next restart.
-- Challenges, a lost ball and deflections do not change possession until the opponent recovers
-  the ball.
+Smoothing is the obvious alternative, but the organisers' baselines already show the problem
+with it: a short window flickers and a long window switches late. The decoder avoids both.
 
-The resulting labels have a dead share of 27–37% and 400–460 segments per game.
+### Staying inside the rules
 
-**Making the external games look like automatic tracking** (`possession/degrade.py`). The sample
-tracking is corrected: every player is always tracked, and the ball is missing almost exactly
-when it is dead. A model trained on that would learn "no ball = dead ball". We therefore:
-1. Fill every ball gap inside a half by interpolation, which removes that leak.
-2. Drop the ball again in random bursts (two-state Markov chain, mean gap 1.6 s) to the **41%
-   missing rate published in DATA.md**.
-3. Drop players in bursts to the published ~20.5 of 22 tracked.
-4. Add low-frequency position noise (0.3 m for the ball, 0.15 m for players).
+All training and all tuning is done on external data, the three Metrica Sports sample games.
+The competition match only goes through models that were finished before they ever saw it.
+Nobody labelled anything by hand, we never opened the video, and the ground truth file was only
+used once at the end to check the CSV format and that the frames lined up. The match data
+stayed on our own laptop the whole time.
 
-Each game is degraded with two seeds and also mirrored (home ↔ away swapped, labels swapped),
-which keeps the possession model symmetric.
+There are two small rules that use Smart Tagging (section 1.5). We set their values by hand
+because the sample games don't have Smart Tagging, so there was nothing to tune them on.
 
-### 1.2 Features (identical code for external and competition games)
+### 1.1 Training data
 
-- **Ball:** teleport filter (> 40 m/s), linear bridging of gaps ≤ 0.5 s, and speed from a central
-  difference.
-- **Possession features** (38, oriented to the home side's attacking direction, which is detected
-  per half from mean positions):
-  - each team's nearest-player distance to the ball and their margin, smoothed at 0.25 s and 1 s;
-  - players of each team within 3 m and 8 m;
-  - ball speed and ball position;
-  - the margin carried forward and backward across ball gaps, with its age in frames;
-  - collective team shape smoothed over ±1 s: centroid, spread, most advanced and deepest player,
-    mean speed, forward velocity, players tracked, and home-minus-away differences.
-- **Dead-ball features** (20):
-  - ball outside the lines (instantaneous and smoothed over 1 s and 3 s);
-  - ball speed and the fraction of time the ball is still;
-  - distance to the nearest line; nearest-player distance;
-  - time since and until the ball was last seen;
-  - median player speed smoothed at 1, 3 and 6 s, and maximum player speed;
-  - players tracked; team spread; speed difference between the teams.
+Metrica has released three sample matches with tracking and event data for both teams, at
+25 fps. We turned the events into frame labels with a short script that follows the competition
+definition:
 
-Player speeds are computed from positions, with values above 12 m/s discarded as identity
-switches, so they are consistent across both sources.
+- A team has the ball from its first controlled action (pass, carry, recovery, shot or restart)
+  until the other team gets one.
+- The ball is dead from when it crosses a line, a foul is given or a goal goes in, until play
+  restarts.
+- Challenges, deflections and lost balls don't change possession by themselves. Only the
+  opponent's recovery does.
+
+That gives between 27% and 37% dead time and roughly 400 to 460 segments per match.
+
+There was one catch. In the sample games the ball goes missing almost exactly when it's dead,
+because that tracking has been cleaned up by hand. A model trained on that would just learn
+"no ball means dead ball", and that's not true in the automatic tracking for the competition
+match. So before training we:
+
+1. filled in the ball gaps inside each half by interpolation,
+2. removed the ball again in random bursts until 41% of frames were missing (the figure from
+   DATA.md),
+3. removed players in bursts so about 20.5 of 22 are tracked, also from DATA.md,
+4. added a bit of slow-drifting noise to positions (0.3 m for the ball, 0.15 m for players).
+
+We did this with two random seeds per match, and also made a copy of each match with home and
+away swapped, so the model doesn't favour either side.
+
+### 1.2 Features
+
+The same code builds the features for the sample games and the competition match.
+
+The ball track gets a quick clean-up first. We drop jumps faster than 40 m/s, fill gaps shorter
+than half a second, and work out speed from position.
+
+For possession (38 features), everything is turned to face the home team's attacking direction.
+We work that out per half from where each team stands on average. The features are:
+
+- the closest player from each team to the ball, and the gap between them (raw and smoothed)
+- how many players from each team are within 3 m and 8 m of the ball
+- ball speed and position
+- the last known gap before the ball went missing, the next one after it comes back, and how
+  long ago or how far ahead those were
+- team shape over the last second: centre, spread, highest and deepest player, average speed,
+  forward movement and how many players are tracked, plus home minus away for each
+
+For dead balls (20 features):
+
+- whether the ball is outside the lines, now and averaged over 1 s and 3 s
+- ball speed and how often it's been still
+- distance to the nearest line, and the closest player to the ball
+- how long since the ball was last seen, and how long until it's seen again
+- median player speed over 1, 3 and 6 seconds, and the fastest player
+- how many players are tracked, how spread out they are, and the speed gap between the teams
+
+Player speeds come from positions. Anything over 12 m/s is thrown away, because that's usually
+the tracker swapping two players.
 
 ### 1.3 Classifiers
 
-There are two scikit-learn `HistGradientBoostingClassifier`s (300 iterations, learning rate 0.05,
-31 leaves, at least 200 samples per leaf, L2 = 1, fixed seed), trained on every 3rd frame:
-- **Possession:** home vs away, on ball-alive frames.
-- **Dead ball:** dead vs alive, on all graded frames.
+Both are scikit-learn `HistGradientBoostingClassifier` models with 300 iterations, learning rate
+0.05, 31 leaves, at least 200 samples per leaf, L2 of 1 and a fixed seed. They train on every
+third frame, since neighbouring frames are nearly identical.
 
-### 1.4 Decoder and its tuning on external data
+- The possession model learns home vs away, on frames where the ball is in play.
+- The dead-ball model learns dead vs in play, on all graded frames.
 
-Emissions:
-- `e_HA = ha_scale · logit(P_home)`
-- `e_D = d_scale · logit(P_dead) + d_bias`
+### 1.4 Decoder and how we tuned it
 
-The costs are `p_switch` for H↔A and `p_dead` for alive↔dead.
+The decoder has five settings:
 
-All five parameters are tuned by coordinate descent over a grid. The objective is the
-**organisers' own spellF1 code** (vendored unchanged), averaged over **leave-one-game-out**
-predictions: the classifiers that score game *k* were trained on the other two games.
+- `ha_scale` scales how much the possession probability counts
+- `d_scale` scales how much the dead-ball probability counts
+- `d_bias` shifts the dead-ball side up or down
+- `p_switch` is the cost of switching between H and A
+- `p_dead` is the cost of switching between in play and dead
 
-Tuned values: `p_switch = 13`, `p_dead = 25`, `ha_scale = 1.0`, `d_scale = 0.5`, `d_bias = 1.5`.
+To tune them we trained on two sample matches, predicted the third, and repeated that for all
+three. Then we searched a grid of settings and kept whichever gave the best average spellF1 on
+those held-out predictions, scored with the organisers' own code.
 
-**Held-out results on the degraded external games** (each game scored by models that never saw
-it):
+We ended up with `p_switch` = 13, `p_dead` = 25, `ha_scale` = 1.0, `d_scale` = 0.5 and
+`d_bias` = 1.5.
 
-| game | our spellF1 | our macroF1 | organisers' baseline spellF1 / macroF1, same data |
+Results on each sample match, scored by a model that never trained on it:
+
+| Match | spellF1 | macroF1 | Organisers' baseline on the same data (spellF1 / macroF1) |
 |---|---|---|---|
 | Sample 1 | 0.551 | 0.841 | 0.229 / 0.415 |
 | Sample 2 | 0.599 | 0.827 | 0.234 / 0.444 |
 | Sample 3 | 0.549 | 0.852 | 0.200 / 0.449 |
 
-The final classifiers are then retrained on all three games and saved to `models/model.joblib`.
-`models/training_report.txt` records the full run.
+After that we retrained both classifiers on all three matches and saved them in
+`models/model.joblib`. The full training log is in `models/training_report.txt`.
 
-### 1.5 Competition game: structural priors (fixed, not tuned)
+### 1.5 Two rules for the competition match
 
-- **Before each half's kickoff the ball is dead.** The kickoff is the first frame the ball moves
-  faster than 3 m/s inside the Smart Tagging `Kick Off (Start)` interval, which handles the graded
-  but pre-kickoff start of the second half.
-- **+1.0 log-odds of dead over the 2 s before each tagged `SET PIECES` start.** That is the
-  stoppage before a restart. There is no Smart Tagging for the external games, so this constant
-  is set by reasoning and not tuned anywhere.
+- Before each half kicks off, the ball is dead. We find the kickoff as the first frame inside
+  the Smart Tagging "Kick Off (Start)" tag where the ball moves faster than 3 m/s. This matters
+  for the second half, which is graded from a couple of minutes before the kickoff.
+- In the 2 seconds before each tagged set piece we nudge the decoder towards "dead" by 1.0
+  (in log-odds), since play is usually stopped just before a restart.
 
-Ungraded frames are written as `X`. Graded frames are never abstained.
+Frames outside the graded halves are X. We never use X inside the graded halves.
 
-## 2. Assets used and dropped
+## 2. What we used and what we left out
 
-| asset | used? | notes |
+| Asset | Used | Why |
 |---|---|---|
-| Tactical ATD and metadata | **yes** | main input; track slot → team, first team = home |
-| Smart Tagging | **yes** | kickoff frames and set-piece stoppage prior only |
-| Homography | no | only needed to work in video pixels |
-| Tactical / broadcast video | no | never opened |
-| Broadcast ATD | no | not synchronised to the tactical timeline |
-| Public 5-minute ground truth | format/alignment check only | never used to train, tune or select anything |
-| Metrica sample games 1–3 (external) | **yes** | all training and tuning |
+| Tactical tracking + metadata | Yes | Main input. The metadata tells us which track belongs to which team. |
+| Smart Tagging | Yes | Only for the kickoff and the set piece rule. |
+| Homography | No | Only needed if you work with the video pixels. |
+| Tactical and broadcast video | No | Never opened. |
+| Broadcast tracking | No | It isn't synced to the tactical timeline. |
+| Public 5 minute ground truth | Only to check the format | Not used for training, tuning or choosing anything. |
+| Metrica sample games 1 to 3 | Yes | All of the training and tuning. |
 
 ## 3. Training data
 
-| dataset | source | who labelled it | amount |
-|---|---|---|---|
-| Metrica Sports Sample Games 1, 2, 3 | github.com/metrica-sports/sample-data (public, use with attribution) | event data produced by Metrica Sports; frame labels derived from it by our algorithm (§1.1) | 3 matches, about 430,000 frames, × 2 degradation seeds × 2 mirrorings |
+We only used the three Metrica Sports sample games, from
+github.com/metrica-sports/sample-data. They're public and can be used with credit to Metrica.
+The event data was made by Metrica, and our script turned it into frame labels as described in
+1.1. In total that's about 430,000 frames, times two noise seeds, times two for the home/away
+swap. None of it comes from the competition match.
 
-None of it comes from the provided game.
+## 4. Possession rules in our system
 
-## 4. Possession rules implemented
+- Change of possession only happens when the other team keeps the decoder on its side long
+  enough to cover the switch cost. In practice that means several frames of clearly having the
+  ball.
+- In loose or contested phases the evidence is weak either way, so the ball stays with whoever
+  had it last.
+- Touches, deflections and aerial duels are too short to cause a switch.
+- At a restart, the dead spell ends when the in-play side takes over, and the team that restarts
+  is whichever one the possession model favours at that moment.
+- A dead ball is always D and never given to a team.
 
-- **Change of possession:** only when the other team's evidence pays the switch cost. In
-  practice, that means several frames of it clearly controlling the ball.
-- **Loose and contested balls:** weak evidence either way, so possession stays with the last
-  team.
-- **Touches, deflections, aerial duels without control:** too short to pay for a switch.
-- **Restarts:** the dead stretch ends when the alive evidence takes over. The restarting team is
-  whichever the possession model favours at that moment.
-- **Dead ball:** always `D`, never assigned to a team.
+## 5. Limitations and what we'd do next
 
-## 5. Limitations and next steps
+- The sample games are clean tracking that we made noisy using average numbers. The real
+  automatic tracking has its own quirks, like players swapping IDs and the ball going missing
+  more often in crowded areas. We chose not to measure those on the competition match, to stay
+  on the safe side of the rules. With some external automatic tracking we could copy them
+  better.
+- Three matches isn't a lot to tune five settings on, so the decoder settings are a bit noisy.
+  More open tracking data with events would help.
+- Stoppages where the ball stays on the pitch, like fouls and offsides, are the hardest part.
+  Right now we only catch them through players slowing down.
+- Next we'd like to run a ball detector on the video to fill in the missing 41% (as an input,
+  without training it on this video), and try picking up the referee's whistle from the
+  broadcast audio.
 
-- **Domain gap.** The external games are degraded with published averages, but the real
-  automatic tracking has its own error structure (identity switches, burstier ball loss in crowded
-  areas). We chose not to measure that structure on the provided game, to stay well inside the
-  rules. With more external automatic-tracking data, we would fit the degradation model to it.
-- **Only three external games.** The decoder tuning is noisy at that sample size. More games
-  (other open tracking sets with events) would tighten it.
-- **Dead balls without the ball leaving the pitch** (fouls, offsides) rest on player-speed cues
-  and are the most frequent miss.
-- **Next steps:** a ball detector on the video to fill the 41% gaps, which is allowed as input
-  provided it is not trained on this video; and referee-whistle detection from broadcast audio.
-
-## 6. Reproduction
+## 6. How to reproduce
 
 ```
 pip install -r requirements.txt
-python run.py --data <bundle> --team <TeamName>      # uses committed models/
-# optional, external data only:
-pip install -r requirements-train.txt
-python train.py --sample-data <clone of metrica-sports/sample-data>
+python run.py --data <bundle> --team "FC Data-lona"
 ```
 
-### Run summary for the submitted file
+To retrain from the sample games:
 
-_(paste outputs/<TeamName>_run_log.txt here)_
+```
+pip install -r requirements-train.txt
+python train.py --sample-data <path to metrica-sports/sample-data>
+```
+
+### Log from the submitted run
+
+```
+decoder parameters (tuned on external games): {'p_switch': 13, 'p_dead': 25, 'ha_scale': 1.0, 'd_scale': 0.5, 'd_bias': 1.5}
+teams: H = Barcelona, A = Atletic Club; 46 track slots; 638 smart-tagging instances (25s)
+half 1: kickoff detected at video frame 11189 (4 graded frames before it set dead)
+half 2: kickoff detected at video frame 113660 (2852 graded frames before it set dead)
+summary (graded frames): H 0.329  A 0.204  D 0.467; 246 possessions; ball seen on 59.2% after bridging
+wrote C:\mtah\mtah-possession\mtah-possession\mtah-possession\outputs\FC Data-lona.csv (31s)
+```

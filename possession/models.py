@@ -1,4 +1,4 @@
-"""The two frame classifiers. Trained only on external games (see train.py)."""
+"""The two frame classifiers. They are only ever trained on the sample games (see train.py)."""
 
 import numpy as np
 

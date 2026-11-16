@@ -1,12 +1,12 @@
-"""Regenerate the submission file from the provided match data.
+"""Builds the submission file from the match data.
 
     pip install -r requirements.txt
-    python run.py --data /path/to/bundle --team MyTeam        # writes outputs/MyTeam.csv
+    python run.py --data C:/path/to/bundle --team "FC Data-lona"
 
---data is the unpacked organiser bundle (the folder that contains tactical/). The trained models
-and tuned decoder in models/ come from train.py, which uses external data only. Nothing in this
-script is fitted to the competition game: it applies fixed models and fixed parameters.
-Deterministic: the same data produces the same file.
+--data is the folder from the organisers that has tactical/ inside it.
+The models and decoder settings in models/ come from train.py, which only uses the Metrica
+sample games. Nothing here is fitted to the competition match, it just applies what was
+trained. Same data in, same file out.
 """
 
 import argparse
@@ -22,15 +22,16 @@ from possession.game import load_competition_game
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# Structural priors from Smart Tagging, set by reasoning, NOT tuned (no tagging exists for the
-# external games, so there is nothing to tune them on):
-SETPIECE_DEAD_PRIOR = 1.0   # log-odds of dead added over the 2 s before a tagged set piece
+# Two small rules that use Smart Tagging. We picked these values by hand and did not tune
+# them, because the sample games have no Smart Tagging to tune them on.
+SETPIECE_DEAD_PRIOR = 1.0   # push towards "dead" in the 2 s before a tagged set piece
 SETPIECE_LEAD = 50
-PRE_KICKOFF_DEAD = 50.0     # before the tagged kickoff of a half the ball is dead by definition
+PRE_KICKOFF_DEAD = 50.0     # before the kickoff the ball is dead, so force it
 
 
 def kickoffs(game, ball_speed):
-    """First frame the ball moves (> 3 m/s) inside each half's 'Kick Off (Start)' tag."""
+    """For each half, the first frame inside the 'Kick Off (Start)' tag where the ball moves
+    faster than 3 m/s."""
     out = {}
     for t in game.tags:
         if t["code"] == "SET PIECES" and t["type"] == "kick off (start)":
@@ -52,7 +53,7 @@ def main():
     ap.add_argument("--cache", default=os.path.join(HERE, "cache"))
     args = ap.parse_args()
     if not os.path.isdir(os.path.join(args.data, "tactical")):
-        raise SystemExit("No tactical/ folder under {} -- point --data at the unpacked bundle.".format(args.data))
+        raise SystemExit("Can't find a tactical/ folder in {}. Point --data at the folder you downloaded.".format(args.data))
 
     import joblib
     os.makedirs(args.out, exist_ok=True)

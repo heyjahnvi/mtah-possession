@@ -1,9 +1,9 @@
-"""Per-frame features, computed identically for the external training games and the competition
-game. Nothing here is fitted: it is geometry.
+"""Per-frame features. Same code for the sample games and the competition match, and nothing
+in here is learned.
 
-Two feature matrices per game:
-  possession features -- for 'which team has the ball', oriented to the home side
-  dead features       -- for 'is the ball in play'
+We build two matrices per game:
+  possession features: used to decide which team has the ball (oriented to the home side)
+  dead features: used to decide if the ball is in play
 """
 
 import warnings
@@ -77,8 +77,9 @@ def player_speed(players):
 
 
 def build(game, swap=False):
-    """Returns (X_pos, pos_names, X_dead, dead_names). swap=True exchanges home and away, which is
-    used to double the training data and keep the possession model symmetric."""
+    """Returns (X_pos, pos_names, X_dead, dead_names).
+    swap=True swaps home and away. We use it in training to double the data and keep the
+    possession model symmetric."""
     L, W = game.pitch
     team = (1 - game.team) if swap else game.team
     hm = game.half_mask()

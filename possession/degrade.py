@@ -1,18 +1,18 @@
-"""Make a clean external game look like the competition's automatic tracking.
+"""Add noise to the clean sample games so they look more like the automatic tracking we get
+for the competition match.
 
-The Metrica sample games carry corrected tracking: every player always tracked, and the ball
-present on ~90% of live frames but absent on almost every dead-ball frame. A model trained on that
-would learn "no ball = dead ball", which is false for automatic tracking, where the ball is missing
-on 41% of graded frames for reasons that have nothing to do with the state of play (DATA.md).
+The Metrica sample games use corrected tracking. All players are always there, and the ball
+is missing almost only when it is dead. If we trained on that directly, the model would learn
+"no ball means dead ball", which is not true for automatic tracking (DATA.md says the ball is
+missing on 41% of graded frames).
 
 So before training we:
-  1. fill every ball gap inside a half by linear interpolation (the ball travels from where it
-     went out to where play restarts), which removes the visibility leak;
-  2. drop the ball in bursts with a two-state Markov chain, to the published 41% missing rate;
-  3. drop players in bursts to the published ~20.5 of 22 tracked (about 7% missing);
-  4. add small position noise.
+  1. fill the ball gaps inside each half by interpolation,
+  2. remove the ball again in random bursts until 41% of frames are missing,
+  3. remove players in bursts (about 20.5 of 22 tracked, also from DATA.md),
+  4. add a bit of slow-moving position noise.
 
-Only figures published in the organisers' documentation are used, nothing measured on the game.
+All the numbers come from the organisers' docs, nothing is measured on the match itself.
 """
 
 import numpy as np
@@ -55,7 +55,7 @@ def _burst_mask(n, missing, mean_gap, rng):
 
 
 def _smooth_noise(shape, sigma, rng, w=12):
-    """Low-frequency noise: tracking error drifts, it does not jump every frame."""
+    """Smoothed noise. Tracking errors drift slowly, they don't jump every frame."""
     from .features import rolling_mean
     z = rng.normal(0, sigma * np.sqrt(2 * w + 1), shape)
     return rolling_mean(z.reshape(shape[0], -1), w).reshape(shape).astype(np.float32)

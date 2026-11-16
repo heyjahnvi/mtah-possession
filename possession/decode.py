@@ -1,9 +1,8 @@
-"""Three-state Viterbi (H, A, D) with switching penalties.
+"""Viterbi decoder over three states: H, A and D.
 
-A possession is an interval. Decoding each half at once, with a cost for every change of state,
-turns flickering per-frame probabilities into possessions: a team must out-evidence the incumbent
-for long enough to pay the switch cost. That is our working definition of *controlled*
-possession -- a touch or deflection is not enough evidence to pay for a change.
+Each change of state costs a penalty, so a team only takes the ball over when the model
+favours it for long enough. That is how we deal with touches, deflections and duels: a few
+frames of the other team near the ball are not enough to pay for a switch.
 """
 
 import numpy as np
@@ -59,8 +58,8 @@ def viterbi(e_ha, e_d, p_switch, p_dead):
 
 
 def decode(p_home, p_dead, halves, n, params, extra_dead=None):
-    """p_home: P(home | alive) per frame; p_dead: P(dead) per frame. Returns letters, X outside
-    the halves."""
+    """p_home is P(home | alive) per frame, p_dead is P(dead) per frame.
+    Returns one letter per frame, X outside the halves."""
     e_ha = params["ha_scale"] * logit(p_home)
     e_d = params["d_scale"] * logit(p_dead) + params["d_bias"]
     if extra_dead is not None:

@@ -1,12 +1,12 @@
-"""A match as arrays, and loaders for the competition game and the external training games.
+"""Loading match data into arrays, for the competition match and for the sample games.
 
-Game fields
-    players : (N, S, 2) float32, metres. NaN where a track slot is not seen.
-    team    : (S,) int8, 0 = home, 1 = away.
-    ball    : (N, 2) float32, metres. NaN where the ball is not seen.
-    halves  : [(half, first_frame, last_frame)] inclusive, the graded frames.
-    pitch   : (length, width) metres.
-    tags    : Smart Tagging instances (competition game only), see load_smart_tagging.
+A Game holds:
+    players : (N, S, 2) float32 positions in metres, NaN when a track slot is not seen
+    team    : (S,) int8, 0 for home and 1 for away
+    ball    : (N, 2) float32 in metres, NaN when the ball is not seen
+    halves  : list of (half, first_frame, last_frame), inclusive, the graded frames
+    pitch   : (length, width) in metres
+    tags    : Smart Tagging instances (competition match only)
 """
 
 import json
@@ -192,11 +192,13 @@ def _events_json(path, home_id):
 
 
 def labels_from_events(events, n, halves):
-    """Frame labels for an external game from its (human) event data, using the competition's
-    definition: a team owns the ball from the moment it controls it (pass, carry, recovery, shot,
-    restart) until the opponent does; the ball is dead from the moment it crosses a line, a foul
-    is given or a goal is scored, until the next restart. Possession does not change on
-    challenges, deflections or a lost ball until the opponent recovers it."""
+    """Frame labels for a sample game, built from its event data.
+
+    We follow the competition definition as closely as we can. A team has the ball from its
+    first controlled action (pass, carry, recovery, shot or restart) until the other team gets
+    one. The ball is dead from when it crosses a line, a foul is given or a goal goes in, until
+    the next restart. Challenges, deflections and lost balls don't change possession by
+    themselves, only the opponent's recovery does."""
     lab = np.full(n, "X", dtype="<U1")
     changes = []  # (frame, priority, state)
     for e in events:
@@ -217,7 +219,7 @@ def labels_from_events(events, n, halves):
         state = "D"
         cur = a
         for f, _, st in (c for c in changes if a <= c[0] <= b):
-            # a live-play event during a dead spell means a restart the events did not mark
+            # if a live event shows up while the ball is dead, treat it as a restart
             lab[cur:f] = state
             state, cur = st, f
         lab[cur:b + 1] = state
